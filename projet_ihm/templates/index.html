@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Système IA Miction — CHU</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, sans-serif; background:#F5F7FA; color:#333; }
+
+    .header {
+      background: linear-gradient(135deg, #1565C0, #1976D2);
+      color: white; padding: 20px 30px;
+      display: flex; align-items: center; gap: 15px;
+    }
+    .header h1 { font-size: 22px; }
+    .header p  { font-size: 13px; opacity: 0.85; }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 25px; }
+    .grid-2    { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .grid-3    { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px; }
+
+    .card {
+      background: white; border-radius: 12px;
+      padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .card h2 {
+      font-size: 15px; color: #1565C0;
+      margin-bottom: 15px; border-bottom: 2px solid #E3F2FD;
+      padding-bottom: 8px;
+    }
+
+    .indicator {
+      text-align: center; padding: 15px;
+      background: white; border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      border-left: 4px solid #1565C0;
+    }
+    .indicator .value { font-size: 32px; font-weight: bold; color: #1565C0; line-height: 1; }
+    .indicator .unit  { font-size: 13px; color: #888; margin-top: 4px; }
+    .indicator .label { font-size: 12px; color: #555; margin-top: 6px; }
+
+    .indicator.jet-continu { border-color: #43A047; }
+    .indicator.jet-continu .value { color: #43A047; }
+    .indicator.jet-hache   { border-color: #FF7043; }
+    .indicator.jet-hache   .value { color: #FF7043; }
+    .indicator.jet-faible  { border-color: #FFA726; }
+    .indicator.jet-faible  .value { color: #FFA726; }
+
+    .upload-zone {
+      border: 2px dashed #1976D2; border-radius: 10px;
+      padding: 30px; text-align: center; cursor: pointer;
+      transition: all 0.2s; background: #F8FBFF;
+    }
+    .upload-zone:hover { background: #E3F2FD; border-color: #1565C0; }
+    .upload-zone input { display: none; }
+    .upload-zone .icon { font-size: 36px; margin-bottom: 10px; }
+    .upload-zone p { color: #666; font-size: 14px; }
+
+    .btn {
+      padding: 10px 20px; border: none; border-radius: 8px;
+      cursor: pointer; font-size: 14px; font-weight: bold;
+      transition: all 0.2s; margin: 5px;
+    }
+    .btn-primary { background: #1565C0; color: white; }
+    .btn-primary:hover { background: #0D47A1; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .timeline {
+      display: flex; flex-wrap: wrap; gap: 2px;
+      margin-top: 10px; min-height: 30px;
+    }
+    .seg {
+      width: 8px; height: 30px; border-radius: 2px;
+      transition: all 0.1s; cursor: pointer;
+    }
+    .seg:hover { transform: scaleY(1.3); }
+    .seg.miction_active { background: #43A047; }
+    .seg.bruit_ambiant  { background: #FF7043; }
+    .seg.bruit_chasse   { background: #00BCD4; }
+    .seg.silence        { background: #90A4AE; }
+
+    .legend { display: flex; gap: 15px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .legend-dot  { width: 12px; height: 12px; border-radius: 3px; }
+
+    .loader { display: none; text-align: center; padding: 20px; color: #1565C0; }
+    .spinner {
+      width: 36px; height: 36px; border: 4px solid #E3F2FD;
+      border-top-color: #1565C0; border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin: 0 auto 10px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .tabs { display: flex; gap: 5px; margin-bottom: 20px; }
+    .tab {
+      padding: 10px 20px; border-radius: 8px 8px 0 0;
+      cursor: pointer; font-size: 14px; font-weight: bold;
+      background: #E3F2FD; color: #1565C0; border: none;
+    }
+    .tab.active { background: #1565C0; color: white; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .badge-wifi {
+      display: inline-block; padding: 4px 12px;
+      border-radius: 12px; font-size: 12px; font-weight: bold;
+    }
+    .badge-wifi.online  { background: #E8F5E9; color: #2E7D32; }
+    .badge-wifi.offline { background: #FFEBEE; color: #C62828; }
+    .badge-wifi.live    { background: #FFF3E0; color: #E65100; }
+    .badge-wifi.waiting { background: #E3F2FD; color: #1565C0; }
+
+    /* Barre de progression */
+    .prog-bar {
+      background: #E3F2FD; border-radius: 4px;
+      height: 8px; overflow: hidden; margin: 6px 0;
+    }
+    .prog-fill {
+      height: 100%; background: #1565C0;
+      border-radius: 4px; transition: width 0.3s;
+    }
+    .prog-fill.live-fill { background: #FF7043; }
+    .prog-fill.done-fill { background: #43A047; }
+
+    /* Séparateur interne */
+    .inner-sep {
+      border: none; border-top: 1px dashed #E3F2FD;
+      margin: 15px 0;
+    }
+
+    .btn-vue {
+  padding: 7px 14px; border: 2px solid #1565C0;
+  border-radius: 20px; cursor: pointer;
+  font-size: 12px; font-weight: bold;
+  background: white; color: #1565C0; transition: all 0.2s;
+}
+.btn-vue:hover  { background: #E3F2FD; }
+.btn-vue.active { background: #1565C0; color: white; }
+
+.jour-card {
+  flex: 1; min-width: 110px; padding: 10px;
+  border-radius: 8px; text-align: center;
+  background: white; border: 1px solid #E0E0E0;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.jour-card .jour-date  { font-size:11px; color:#888; margin-bottom:4px; }
+.jour-card .jour-nb    { font-size:24px; font-weight:bold; color:#1565C0; }
+.jour-card .jour-label { font-size:10px; color:#aaa; }
+.jour-card .jour-duree { font-size:11px; color:#43A047; margin-top:3px; }
+.jour-card.zero        { opacity: 0.4; }
+
+
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div>🏥</div>
+  <div>
+    <h1>Système IA — Caractérisation de la Miction</h1>
+    <p>CHU — Démonstrateur Deep Learning | CNN 2D Mel Spectrogram</p>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('atoms3r', event)">📡 ATOMS3R Live</button>
+    <button class="tab" onclick="switchTab('upload', event)">📁 Analyse Fichier</button>
+      <button class="tab" onclick="switchTab('historique', event)"> 📋 Historique</button>
+      <button class="tab" onclick="switchTab('debug', event)"> Debug Serial
+</button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       TAB 1 — ATOMS3R LIVE
+  ══════════════════════════════════════════════════════════ -->
+  <div id="tab-atoms3r" class="tab-content active">
+
+    <div class="card">
+
+      <!-- En-tête statut -->
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:15px;">
+        <h2 style="margin:0; border:none; padding:0;">📡 ATOMS3R Live</h2>
+        <span id="wifi-badge" class="badge-wifi waiting">⏳ En attente</span>
+        <button class="btn btn-primary" onclick="rafraichirAtoms3r()"
+                style="margin-left:auto; padding:6px 14px; font-size:12px;">
+          🔄 Rafraîchir
+        </button>
+      
+      </div>
+      <div style="font-size:12px; color:#888; margin-bottom:15px;" id="wifi-info">
+        Dernière mise à jour : —
+      </div>
+
+      <hr class="inner-sep">
+
+      <!-- ── ÉTAT : EN ATTENTE ── -->
+      <div id="state-waiting" style="text-align:center; padding:30px; color:#999;">
+        <div style="font-size:48px; margin-bottom:12px;">📡</div>
+        <p style="font-size:15px;">En attente de l'ATOMS3R...</p>
+        <p style="font-size:12px; margin-top:8px;">
+          Démarrez un enregistrement sur l'ATOMS3R
+        </p>
+      </div>
+
+      <!-- ── ÉTAT : ANALYSE EN COURS ── -->
+      <div id="state-live" style="display:none;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+          <div class="spinner" style="width:20px; height:20px; border-width:3px; margin:0;"></div>
+          <strong style="color:#E65100;">Analyse en cours...</strong>
+          <span id="live-pct" style="margin-left:auto; font-weight:bold; color:#1565C0;">0%</span>
+        </div>
+        <div class="prog-bar">
+          <div id="live-progress" class="prog-fill live-fill" style="width:0%;"></div>
+        </div>
+        <div style="display:flex; gap:25px; margin-top:12px; font-size:13px; color:#555;">
+          <span>Segment : <strong id="live-seg">0</strong> / <strong id="live-total">?</strong></span>
+          <span>Miction : <strong id="live-duree" style="color:#43A047;">0.0s</strong></span>
+          <span>Type : <strong id="live-type">—</strong></span>
+        </div>
+        <div class="timeline" id="live-timeline" style="margin-top:12px;"></div>
+        <div class="legend" style="margin-top:8px;">
+          <div class="legend-item"><div class="legend-dot" style="background:#43A047;"></div>miction</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#FF7043;"></div>ambiant</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#00BCD4;"></div>chasse</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#90A4AE;"></div>silence</div>
+        </div>
+      </div>
+
+      <!-- ── ÉTAT : BILAN FINAL ── -->
+      <div id="state-result" style="display:none;">
+
+        <!-- Indicateurs -->
+        <div class="grid-3" style="margin-bottom:15px;">
+          <div class="indicator" id="at-card-duree">
+            <div class="value" id="at-duree">—</div>
+            <div class="unit">secondes</div>
+            <div class="label">Durée miction</div>
+          </div>
+          <div class="indicator" id="at-card-type">
+            <div class="value" id="at-type" style="font-size:20px;">—</div>
+            <div class="unit">type de jet</div>
+            <div class="label">Classification</div>
+          </div>
+          <div class="indicator">
+            <div class="value" id="at-chasse">—</div>
+            <div class="unit">chasse d'eau</div>
+            <div class="label">Détection</div>
+          </div>
+        </div>
+
+        <!-- Méta -->
+        <div style="font-size:12px; color:#888; margin-bottom:12px; display:flex; gap:20px; flex-wrap:wrap;">
+          <span>🕐 <strong id="at-timestamp">—</strong></span>
+          <span>📊 Segments : <strong id="at-segs">—</strong></span>
+          <span>🔁 Épisodes : <strong id="at-episodes">—</strong></span>
+        </div>
+
+        <!-- Barre finale -->
+        <div class="prog-bar" style="margin-bottom:12px;">
+          <div class="prog-fill done-fill" style="width:100%;"></div>
+        </div>
+
+        <!-- Timeline finale -->
+        <hr class="inner-sep">
+        <p style="font-size:13px; color:#666; margin-bottom:6px;">📈 Timeline des prédictions</p>
+        <div class="timeline" id="at-timeline"></div>
+        <div class="legend" style="margin-top:8px;">
+          <div class="legend-item"><div class="legend-dot" style="background:#43A047;"></div>miction</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#FF7043;"></div>ambiant</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#00BCD4;"></div>chasse</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#90A4AE;"></div>silence</div>
+        </div>
+
+      </div><!-- fin state-result -->
+
+    </div><!-- fin card -->
+  </div><!-- fin tab-atoms3r -->
+
+  <!-- ══════════════════════════════════════════════════════════
+       TAB 2 — ANALYSE FICHIER
+  ══════════════════════════════════════════════════════════ -->
+  <div id="tab-upload" class="tab-content">
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>📁 Charger un enregistrement</h2>
+        <label class="upload-zone">
+          <input type="file" id="fileInput" accept=".m4a,.wav,.mp3">
+          <div class="icon">🎤</div>
+          <p><strong>Cliquez ou glissez</strong> un fichier audio</p>
+          <p style="margin-top:5px; font-size:12px; color:#999;">Formats : .m4a, .wav, .mp3</p>
+        </label>
+        <div style="margin-top:15px; text-align:center;">
+          <span id="fileName" style="color:#666; font-size:13px;">Aucun fichier sélectionné</span>
+        </div>
+        <div style="text-align:center; margin-top:15px;">
+          <button class="btn btn-primary" id="btnAnalyser" onclick="analyserFichier()" disabled>
+            🔍 Analyser
+          </button>
+        </div>
+        <div class="loader" id="loader">
+          <div class="spinner"></div>
+          <p>Analyse en cours...</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📊 Résultats</h2>
+        <div id="resultats-vide" style="color:#999; text-align:center; padding:30px;">
+          Lancez une analyse pour voir les résultats
+        </div>
+        <div id="resultats-contenu" style="display:none;">
+          <div class="grid-3" style="margin-bottom:15px;">
+            <div class="indicator" id="card-duree">
+              <div class="value" id="val-duree">—</div>
+              <div class="unit">secondes</div>
+              <div class="label">Durée miction</div>
+            </div>
+            <div class="indicator" id="card-type">
+              <div class="value" id="val-type">—</div>
+              <div class="unit">type de jet</div>
+              <div class="label">Classification</div>
+            </div>
+            <div class="indicator">
+              <div class="value" id="val-chasse">—</div>
+              <div class="unit">chasse d'eau</div>
+              <div class="label">Détection</div>
+            </div>
+          </div>
+          <div style="font-size:13px; color:#555;">
+            Temps : <strong id="val-temps">—</strong>s |
+            Segments : <strong id="val-segs">—</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px;">
+      <h2>📈 Timeline des prédictions</h2>
+      <div class="timeline" id="timeline"></div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#43A047;"></div>miction_active</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#FF7043;"></div>bruit_ambiant</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#00BCD4;"></div>bruit_chasse</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#90A4AE;"></div>silence</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px;">
+      <h2>🥧 Distribution des classes</h2>
+      <div style="max-width:300px; margin:0 auto;">
+        <canvas id="chartDistrib"></canvas>
+      </div>
+    </div>
+
+  </div><!-- fin tab-upload -->
+  <!-- ══════════════════ TAB 3 — HISTORIQUE ══════════════════ -->
+  <div id="tab-historique" class="tab-content">
+
+    <!-- Stats globales -->
+    <div class="card" style="margin-bottom:20px;">
+      <h2>📊 Statistiques globales</h2>
+      <div class="grid-3">
+        <div class="indicator">
+          <div class="value" id="hist-total">—</div>
+          <div class="unit">enregistrements</div>
+          <div class="label">Total bilans</div>
+        </div>
+        <div class="indicator">
+          <div class="value" id="hist-avg">—</div>
+          <div class="unit">secondes</div>
+          <div class="label">Durée moyenne</div>
+        </div>
+        <div class="indicator">
+          <div class="value" id="hist-types"
+              style="font-size:13px; line-height:1.6;">—</div>
+          <div class="unit">répartition</div>
+          <div class="label">Types de jet</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Activité -->
+    <div class="card" style="margin-bottom:20px;">
+      <div style="display:flex; align-items:center;
+                  margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+        <h2 style="margin:0; border:none; padding:0;">📈 Activité</h2>
+        <div style="margin-left:auto; display:flex; gap:8px;">
+          <button class="btn-vue active" id="vue-jour"
+                  onclick="changerVue('jour')">📅 Journalier</button>
+          <button class="btn-vue" id="vue-semaine"
+                  onclick="changerVue('semaine')">📆 Hebdomadaire</button>
+          <button class="btn-vue" id="vue-mois"
+                  onclick="changerVue('mois')">🗓 Mensuel</button>
+        </div>
+      </div>
+
+      <!-- Journalier -->
+      <div id="vue-jour-content">
+        <p style="font-size:12px; color:#888; margin-bottom:10px;">
+          7 derniers jours
+        </p>
+        <div style="position:relative; height:200px;">
+          <canvas id="chartJour"></canvas>
+        </div>
+        <div id="grille-jour"
+            style="margin-top:15px; display:flex; gap:8px; flex-wrap:wrap;">
+        </div>
+      </div>
+
+      <!-- Hebdomadaire -->
+      <div id="vue-semaine-content" style="display:none;">
+        <p style="font-size:12px; color:#888; margin-bottom:10px;">
+          8 dernières semaines
+        </p>
+        <div style="position:relative; height:200px;">
+          <canvas id="chartSemaine"></canvas>
+        </div>
+        <div id="grille-semaine"
+            style="margin-top:15px; display:flex; gap:8px; flex-wrap:wrap;">
+        </div>
+      </div>
+
+      <!-- Mensuel -->
+      <div id="vue-mois-content" style="display:none;">
+        <p style="font-size:12px; color:#888; margin-bottom:10px;">
+          6 derniers mois
+        </p>
+        <div style="position:relative; height:200px;">
+          <canvas id="chartMois"></canvas>
+        </div>
+        <div id="grille-mois"
+            style="margin-top:15px; display:flex; gap:8px; flex-wrap:wrap;">
+        </div>
+      </div>
+    </div>
+
+    <!-- Liste bilans -->
+    <div class="card">
+      <div style="display:flex; align-items:center; margin-bottom:15px;">
+        <h2 style="margin:0; border:none; padding:0;">📋 Liste des bilans</h2>
+        <button class="btn btn-primary" onclick="chargerHistorique()"
+                style="margin-left:auto; padding:6px 14px; font-size:12px;">
+          🔄 Rafraîchir
+        </button>
+      </div>
+      <div id="hist-vide"
+          style="color:#999; text-align:center; padding:30px;">
+        Aucun bilan enregistré
+      </div>
+      <div id="hist-liste" style="display:none; overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+          <thead>
+            <tr style="background:#1565C0; color:white;">
+              <th style="padding:10px 8px; text-align:left;">#</th>
+              <th style="padding:10px 8px; text-align:left;">Date</th>
+              <th style="padding:10px 8px; text-align:left;">Heure</th>
+              <th style="padding:10px 8px; text-align:center;">Durée</th>
+              <th style="padding:10px 8px; text-align:center;">Type</th>
+              <th style="padding:10px 8px; text-align:center;">Épisodes</th>
+              <th style="padding:10px 8px; text-align:center;">Chasse</th>
+              <th style="padding:10px 8px; text-align:center;">Segs</th>
+              <th style="padding:10px 8px; text-align:center;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="hist-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- fin tab-historique -->
+
+  <!-- Contenu onglet debug -->
+  <div id="tab-debug" class="tab-content">
+    <div class="card">
+      <div style="display:flex; align-items:center; margin-bottom:10px;">
+        <h2 style="margin:0; border:none; padding:0;">📟 Logs ATOMS3R</h2>
+        <button onclick="clearLogs()"
+          style="margin-left:auto; background:#E53935; color:white;
+                border:none; border-radius:4px; padding:5px 12px;
+                cursor:pointer;">🗑 Vider</button>
+      </div>
+      <div id="debug-logs"
+          style="background:#1C1C1C; color:#00FF00; font-family:monospace;
+                  font-size:12px; padding:10px; border-radius:6px;
+                  height:400px; overflow-y:auto;">
+        En attente de logs...
+      </div>
+    </div>
+  </div>
+
+</div><!-- fin container -->
+
+<script>
+const COLORS = {
+  miction_active:'#43A047', bruit_ambiant:'#FF7043',
+  bruit_chasse:'#00BCD4',   silence:'#90A4AE',
+};
+const LABEL_CLASSES = ['ambiant','chasse','miction','silence'];
+const LABEL_COLORS  = { 0:'#FF7043', 1:'#00BCD4', 2:'#43A047', 3:'#90A4AE' };
+
+let chartDistrib  = null;
+let liveInterval  = null;
+let dernierBilanTs = null;  // timestamp du dernier bilan affiché
+
+// ── Tabs ──────────────────────────────────────────────────────
+function switchTab(tab, event) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (event) event.target.classList.add('active');
+}
+
+// ── Helpers état ATOMS3R ──────────────────────────────────────
+function showState(state) {
+  // state = 'waiting' | 'live' | 'result'
+  document.getElementById('state-waiting').style.display = state === 'waiting' ? 'block' : 'none';
+  document.getElementById('state-live').style.display    = state === 'live'    ? 'block' : 'none';
+  document.getElementById('state-result').style.display  = state === 'result'  ? 'block' : 'none';
+}
+
+function updateBadge(mode) {
+  const badge = document.getElementById('wifi-badge');
+  if (mode === 'waiting') { badge.className = 'badge-wifi waiting'; badge.textContent = '⏳ En attente'; }
+  if (mode === 'live')    { badge.className = 'badge-wifi live';    badge.textContent = '🔴 Analyse en cours'; }
+  if (mode === 'online')  { badge.className = 'badge-wifi online';  badge.textContent = '✅ Bilan reçu'; }
+  if (mode === 'offline') { badge.className = 'badge-wifi offline'; badge.textContent = '❌ Non connecté'; }
+}
+
+function buildTimeline(containerId, labels) {
+  const tl = document.getElementById(containerId);
+  tl.innerHTML = '';
+  labels.forEach(lbl => {
+    const seg = document.createElement('div');
+    seg.className = 'seg';
+    seg.style.background = LABEL_COLORS[lbl] ?? '#999';
+    seg.title = LABEL_CLASSES[lbl] ?? '?';
+    tl.appendChild(seg);
+  });
+}
+
+// ── Polling live (pendant l'analyse) ─────────────────────────
+function demarrerPollingLive() {
+  if (liveInterval) return;
+  liveInterval = setInterval(async () => {
+    try {
+      const resp = await fetch('/api/atoms3r/live');
+      const data = await resp.json();
+      if (!data.success || !data.live.active) return;
+
+      const live = data.live;
+      const pct  = live.total_segs > 0
+        ? Math.round(live.seg_courant * 100 / live.total_segs) : 0;
+
+      showState('live');
+      updateBadge('live');
+
+      document.getElementById('live-pct').textContent   = pct + '%';
+      document.getElementById('live-progress').style.width = pct + '%';
+      document.getElementById('live-seg').textContent   = live.seg_courant;
+      document.getElementById('live-total').textContent = live.total_segs;
+      document.getElementById('live-duree').textContent = live.duree_miction + 's';
+      document.getElementById('live-type').textContent  = live.type_miction.replace(/_/g,' ');
+      buildTimeline('live-timeline', live.labels);
+
+    } catch(e) {}
+  }, 500);
+}
+
+function arreterPollingLive() {
+  if (liveInterval) { clearInterval(liveInterval); liveInterval = null; }
+}
+
+// ── Rafraîchissement bilan final ─────────────────────────────
+async function rafraichirAtoms3r() {
+  try {
+    // ── Vérifier d'abord si analyse en cours ─────────────────
+    const liveResp = await fetch('/api/atoms3r/live');
+    const liveData = await liveResp.json();
+
+    if (liveData.success && liveData.live.active) {
+      // Analyse en cours → afficher état live
+      const live = liveData.live;
+      const pct  = live.total_segs > 0
+        ? Math.round(live.seg_courant * 100 / live.total_segs) : 0;
+
+      updateBadge('live');
+      document.getElementById('wifi-info').textContent =
+        `Analyse en cours... ${pct}%`;
+      showState('live');
+
+      document.getElementById('live-pct').textContent      = pct + '%';
+      document.getElementById('live-progress').style.width = pct + '%';
+      document.getElementById('live-seg').textContent      = live.seg_courant;
+      document.getElementById('live-total').textContent    = live.total_segs;
+      document.getElementById('live-duree').textContent    = live.duree_miction + 's';
+      document.getElementById('live-type').textContent     =
+        live.type_miction.replace(/_/g,' ');
+      buildTimeline('live-timeline', live.labels);
+      return;  // ← ne pas chercher le bilan final pendant l'analyse
+    }
+
+    // ── Pas d'analyse en cours → chercher dernier bilan ──────
+    const resp = await fetch('/api/atoms3r/last');
+    const data = await resp.json();
+    const info = document.getElementById('wifi-info');
+
+    if (!data.success) {
+      updateBadge('waiting');
+      info.textContent = 'Aucun bilan reçu';
+      showState('waiting');
+      return;
+    }
+
+    const b = data.bilan;
+    if (b.timestamp !== dernierBilanTs) {
+      dernierBilanTs = b.timestamp;
+      arreterPollingLive();
+      afficherBilan(b);
+    }
+
+  } catch(e) {
+    updateBadge('offline');
+    console.error(e);
+  }
+}
+
+function afficherBilan(b) {
+  updateBadge('online');
+  document.getElementById('wifi-info').textContent = `Reçu à ${b.timestamp}`;
+  showState('result');
+
+  document.getElementById('at-duree').textContent     = b.duree_miction + 's';
+  document.getElementById('at-type').textContent      = b.type_miction.replace(/_/g,' ');
+  document.getElementById('at-chasse').textContent    = b.chasse ? 'Oui' : 'Non';
+  document.getElementById('at-timestamp').textContent = b.timestamp;
+  document.getElementById('at-segs').textContent      = b.segs_analyses;
+  document.getElementById('at-episodes').textContent  = b.n_episodes;
+
+  document.getElementById('at-card-type').className  = 'indicator ' + b.type_miction;
+  document.getElementById('at-card-duree').className = 'indicator ' + b.type_miction;
+
+  if (b.labels) buildTimeline('at-timeline', b.labels);
+}
+
+// Polling toutes les 2 secondes
+setInterval(rafraichirAtoms3r, 2000);
+rafraichirAtoms3r();
+
+// ── Analyse Fichier ───────────────────────────────────────────
+document.getElementById('fileInput').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (f) {
+    document.getElementById('fileName').textContent = f.name;
+    document.getElementById('btnAnalyser').disabled = false;
+  }
+});
+
+async function analyserFichier() {
+  const f = document.getElementById('fileInput').files[0];
+  if (!f) return;
+  document.getElementById('loader').style.display    = 'block';
+  document.getElementById('btnAnalyser').disabled    = true;
+  document.getElementById('resultats-vide').style.display    = 'none';
+  document.getElementById('resultats-contenu').style.display = 'none';
+
+  const fd = new FormData();
+  fd.append('file', f);
+  try {
+    const resp = await fetch('/api/upload', { method:'POST', body:fd });
+    const data = await resp.json();
+    if (data.success) afficherResultats(data.resultats);
+    else alert('Erreur : ' + data.error);
+  } catch(e) {
+    alert('Erreur connexion : ' + e.message);
+  } finally {
+    document.getElementById('loader').style.display = 'none';
+    document.getElementById('btnAnalyser').disabled = false;
+  }
+}
+
+// ── Debug logs ────────────────────────────────────────────────
+let lastLogCount = 0;
+
+async function chargerLogs() {
+  try {
+    const resp = await fetch('/api/serial/logs');
+    const data = await resp.json();
+    if (data.logs.length !== lastLogCount) {
+      lastLogCount = data.logs.length;
+      const div = document.getElementById('debug-logs');
+      div.innerHTML = data.logs.map(l =>
+        `<div><span style="color:#888">[${l.ts}]</span> ${l.msg}</div>`
+      ).join('');
+      div.scrollTop = div.scrollHeight;  // scroll vers le bas
+    }
+  } catch(e) {}
+}
+
+// Polling toutes les 500ms
+setInterval(chargerLogs, 500);
+
+function afficherResultats(r) {
+  document.getElementById('val-duree').textContent  = r.duree_miction_s + 's';
+  document.getElementById('val-type').textContent   = r.type_miction.replace(/_/g,' ');
+  document.getElementById('val-chasse').textContent = r.chasse_detectee ? '✅ Oui' : '❌ Non';
+  document.getElementById('val-temps').textContent  = r.temps_analyse;
+  document.getElementById('val-segs').textContent   = r.n_segments;
+  document.getElementById('card-type').className    = 'indicator ' + r.type_miction;
+  document.getElementById('resultats-contenu').style.display = 'block';
+
+  const tl = document.getElementById('timeline');
+  tl.innerHTML = '';
+  r.labels_pred.forEach((lbl, i) => {
+    const seg = document.createElement('div');
+    seg.className = 'seg ' + lbl;
+    seg.title = `t=${r.t_starts[i]}s — ${lbl} (${(r.confidences[i]*100).toFixed(0)}%)`;
+    tl.appendChild(seg);
+  });
+
+  const distrib = r.distribution;
+  const labels  = Object.keys(distrib);
+  const values  = Object.values(distrib);
+  const colors  = labels.map(l => COLORS[l] || '#999');
+  if (chartDistrib) chartDistrib.destroy();
+  const ctx = document.getElementById('chartDistrib').getContext('2d');
+  chartDistrib = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 2 }] },
+    options: { plugins: { legend: { position:'bottom', labels:{ font:{ size:12 } } } } }
+  });
+}
+
+// ── Historique ────────────────────────────────────────────────
+const TYPE_COLORS_H = {
+  'jet_continu':'#43A047', 'jet_hache':'#FF7043',
+  'jet_faible':'#FFA726',  '---':'#90A4AE',
+};
+let chartJour=null, chartSemaine=null, chartMois=null;
+
+function changerVue(vue) {
+  ['jour','semaine','mois'].forEach(v => {
+    document.getElementById('vue-'+v+'-content').style.display =
+      v===vue ? 'block' : 'none';
+    document.getElementById('vue-'+v).classList.toggle('active', v===vue);
+  });
+}
+
+async function chargerHistorique() {
+  try {
+    // Stats
+    const sData = await (await fetch('/api/historique/stats')).json();
+    if (sData.success) {
+      document.getElementById('hist-total').textContent = sData.total;
+      document.getElementById('hist-avg').textContent   = sData.avg_duree+'s';
+      document.getElementById('hist-types').textContent =
+        Object.entries(sData.types)
+          .map(([t,n]) => t.replace(/_/g,' ')+' : '+n).join('\n') || '—';
+    }
+
+    // Activité
+    const aData = await (await fetch('/api/historique/activite')).json();
+    if (aData.success) {
+      afficherJournalier(aData.journalier);
+      afficherHebdo(aData.hebdo);
+      afficherMensuel(aData.mensuel);
+    }
+
+    // Liste
+    const data = await (await fetch('/api/historique?limit=50')).json();
+    if (!data.success || data.bilans.length===0) {
+      document.getElementById('hist-vide').style.display  = 'block';
+      document.getElementById('hist-liste').style.display = 'none';
+      return;
+    }
+    document.getElementById('hist-vide').style.display  = 'none';
+    document.getElementById('hist-liste').style.display = 'block';
+
+    const tbody = document.getElementById('hist-tbody');
+    tbody.innerHTML = '';
+    data.bilans.forEach((b,i) => {
+      const color = TYPE_COLORS_H[b.type_miction]||'#90A4AE';
+      const tr = document.createElement('tr');
+      tr.style.background = i%2===0 ? '#F8F9FA' : '#FFFFFF';
+      tr.innerHTML = `
+        <td style="padding:9px 8px;color:#666;">${b.id}</td>
+        <td style="padding:9px 8px;font-weight:bold;">${b.date}</td>
+        <td style="padding:9px 8px;color:#666;">${b.heure}</td>
+        <td style="padding:9px 8px;text-align:center;font-weight:bold;color:${color};">
+          ${b.duree_miction}s</td>
+        <td style="padding:9px 8px;text-align:center;">
+          <span style="background:${color};color:white;padding:3px 8px;
+            border-radius:12px;font-size:11px;font-weight:bold;">
+            ${b.type_miction.replace(/_/g,' ')}</span></td>
+        <td style="padding:9px 8px;text-align:center;">${b.n_episodes}</td>
+        <td style="padding:9px 8px;text-align:center;">
+          ${b.chasse}</td>
+        <td style="padding:9px 8px;text-align:center;color:#666;">
+          ${b.segs_analyses}</td>
+        <td style="padding:9px 8px;text-align:center;">
+          <button onclick="supprimerBilan(${b.id},this)"
+            style="background:#E53935;color:white;border:none;
+                   border-radius:4px;padding:3px 8px;cursor:pointer;
+                   font-size:11px;">🗑</button></td>`;
+      tbody.appendChild(tr);
+    });
+  } catch(e) { console.error('Erreur historique:',e); }
+}
+
+function afficherJournalier(data) {
+  const jours = [];
+  for (let i=6; i>=0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate()-i);
+    const key = d.toLocaleDateString('fr-FR',{
+      day:'2-digit',month:'2-digit',year:'numeric'
+    });
+    const label = d.toLocaleDateString('fr-FR',{
+      weekday:'short',day:'numeric',month:'short'
+    });
+    const found = data.find(r => r.date===key);
+    jours.push({ label, nb:found?found.nb:0,
+                 avg:found?Math.round(found.avg_duree*10)/10:0 });
+  }
+
+  if (chartJour) chartJour.destroy();
+  chartJour = new Chart(
+    document.getElementById('chartJour').getContext('2d'), {
+    type:'bar',
+    data:{
+      labels: jours.map(j=>j.label),
+      datasets:[{
+        label:'Mictions',
+        data: jours.map(j=>j.nb),
+        backgroundColor: jours.map(j=>
+          j.nb===0?'#E0E0E0':j.nb>=3?'#1565C0':'#42A5F5'),
+        borderRadius:6
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        y:{beginAtZero:true,ticks:{stepSize:1},
+           title:{display:true,text:'Nb mictions'}},
+        x:{grid:{display:false}}
+      }
+    }
+  });
+
+  const grille = document.getElementById('grille-jour');
+  grille.innerHTML='';
+  jours.forEach(j=>{
+    const c = document.createElement('div');
+    c.className='jour-card'+(j.nb===0?' zero':'');
+    c.innerHTML=`
+      <div class="jour-date">${j.label}</div>
+      <div class="jour-nb">${j.nb}</div>
+      <div class="jour-label">miction${j.nb>1?'s':''}</div>
+      ${j.nb>0
+        ?`<div class="jour-duree">moy. ${j.avg}s</div>`
+        :`<div class="jour-label">—</div>`}`;
+    grille.appendChild(c);
+  });
+}
+
+function afficherHebdo(data) {
+  if (chartSemaine) chartSemaine.destroy();
+  chartSemaine = new Chart(
+    document.getElementById('chartSemaine').getContext('2d'), {
+    type:'bar',
+    data:{
+      labels: data.map(r=>'Sem. '+r.debut),
+      datasets:[
+        { label:'Nb mictions', data:data.map(r=>r.nb),
+          backgroundColor:'#1976D2', borderRadius:6, yAxisID:'y' },
+        { label:'Durée moy.(s)',
+          data:data.map(r=>Math.round(r.avg_duree*10)/10),
+          type:'line', borderColor:'#43A047',
+          backgroundColor:'transparent',
+          pointBackgroundColor:'#43A047',
+          tension:0.3, yAxisID:'y1' }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:'top',labels:{font:{size:11}}}},
+      scales:{
+        y: {beginAtZero:true,position:'left',
+            title:{display:true,text:'Nb mictions'}},
+        y1:{beginAtZero:true,position:'right',
+            title:{display:true,text:'Durée moy.(s)'},
+            grid:{drawOnChartArea:false}},
+        x: {grid:{display:false}}
+      }
+    }
+  });
+
+  const grille=document.getElementById('grille-semaine');
+  grille.innerHTML='';
+  data.forEach(r=>{
+    const c=document.createElement('div');
+    c.className='jour-card';
+    c.innerHTML=`
+      <div class="jour-date">Sem. ${r.debut}</div>
+      <div class="jour-nb">${r.nb}</div>
+      <div class="jour-label">mictions</div>
+      <div class="jour-duree">moy. ${Math.round(r.avg_duree*10)/10}s</div>`;
+    grille.appendChild(c);
+  });
+}
+
+function afficherMensuel(data) {
+  if (chartMois) chartMois.destroy();
+  chartMois = new Chart(
+    document.getElementById('chartMois').getContext('2d'), {
+    type:'bar',
+    data:{
+      labels: data.map(r=>r.mois),
+      datasets:[
+        { label:'jet continu', data:data.map(r=>r.continu),
+          backgroundColor:'#43A047', borderRadius:4 },
+        { label:'jet haché',   data:data.map(r=>r.hache),
+          backgroundColor:'#FF7043', borderRadius:4 },
+        { label:'jet faible',  data:data.map(r=>r.faible),
+          backgroundColor:'#FFA726', borderRadius:4 },
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:'top',labels:{font:{size:11}}}},
+      scales:{
+        x:{stacked:true, grid:{display:false}},
+        y:{stacked:true, beginAtZero:true,
+           title:{display:true,text:'Nb mictions'}}
+      }
+    }
+  });
+
+  const grille=document.getElementById('grille-mois');
+  grille.innerHTML='';
+  data.forEach(r=>{
+    const c=document.createElement('div');
+    c.className='jour-card';
+    c.innerHTML=`
+      <div class="jour-date">${r.mois}</div>
+      <div class="jour-nb">${r.nb}</div>
+      <div class="jour-label">mictions</div>
+      <div class="jour-duree">moy. ${Math.round(r.avg_duree*10)/10}s</div>`;
+    grille.appendChild(c);
+  });
+}
+
+async function supprimerBilan(id, btn) {
+  if (!confirm('Supprimer ce bilan ?')) return;
+  try {
+    await fetch(`/api/historique/${id}`, {method:'DELETE'});
+    btn.closest('tr').remove();
+    chargerHistorique();
+  } catch(e) { console.error(e); }
+}
+
+chargerHistorique();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+raw_audio/
+wav_audio/
+__pycache__/
+*.pyc
+*.wav
+*.m4a
+*.h5
+*.keras
+venv/
+.env
+.DS_Store
