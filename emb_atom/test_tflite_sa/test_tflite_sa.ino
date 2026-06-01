@@ -54,6 +54,8 @@ float duree_miction = 0.0f;
 int   n_episodes    = 0;
 bool  chasse        = false;
 int   segs_analyses = 0;
+bool mode_serial = false;  // ← variable globale
+
 
 #define MAX_HISTORY 500
 int8_t label_history[MAX_HISTORY];
@@ -98,17 +100,19 @@ void initMelFilterbank() {
             enorm += val;
         }
 
-        /*// ── Normalisation Slaney (identique à librosa) ────────
+        /*/ ── Normalisation Slaney (identique à librosa) ────────
         // Diviser par la largeur en Hz du filtre
         float hz_fl = mel2hz(mel_pts[m]);
         float hz_fr = mel2hz(mel_pts[m+2]);
         float norm  = 2.0f / (hz_fr - hz_fl + 1e-9f);
 
         for (int k = 0; k < N_FREQ; k++)
-            mel_filterbank[m*N_FREQ+k] *= norm;
+            mel_filterbank[m*N_FREQ+k] *= norm;*/
+        
 
-        */
+        
     }
+
 }
 // ════════════════════════════════════════════════════════════════
 // Spectrogramme Mel
@@ -147,30 +151,28 @@ void computeMelSpec(int16_t* segment, float* mel_out) {
         FFT.complexToMagnitude(vReal, vImag, N_FFT);
 
          // ── Correction fréquentielle ──────────────────────────
+
+         // Variable globale
+       
         for (int k = 0; k < N_FREQ; k++) {
             float freq = (float)k * SAMPLE_RATE / N_FFT;
             float correction = 1.0f;
-          /*if      (freq < 500)                  correction = 0.40f;
-            else if (freq >= 500  && freq < 1000) correction = 1.60f;
-            else if (freq >= 1000 && freq < 2000) correction = 0.20f;
-            else if (freq >= 2000 && freq < 4000) correction = 0.20f;
-            else if (freq >= 4000)                correction = 0.40f;*/  
-            
         
-            if      (freq < 500)                  correction = 0.50f;
+           /* if      (freq < 500)                  correction = 0.50f;
             else if (freq >= 500  && freq < 1000) correction = 1.40f;
             else if (freq >= 1000 && freq < 2000) correction = 1.15f;
             else if (freq >= 2000 && freq < 4000) correction = 0.25f;
-            else if (freq >= 4000)                correction = 0.50f;
+            else if (freq >= 4000)                correction = 0.50f;*/
 
             vReal[k] *= correction;
         }
+        
 
 
         for (int m = 0; m < N_MELS; m++) {
             float val = 0.0f;
             for (int k = 0; k < N_FREQ; k++)
-             val += mel_filterbank[m*N_FREQ+k] * vReal[k];  // ← sans *vReal[k]
+            val += mel_filterbank[m*N_FREQ+k] * vReal[k];  // ← sans *vReal[k]
             //val += mel_filterbank[m*N_FREQ+k] * vReal[k] * vReal[k];
 
             val = 10.0f * log10f(val + 1e-10f);
@@ -488,6 +490,7 @@ void envoyerUpdate(int seg_idx, int label_idx, float duree, String type) {
 
 // ── Nouvelle fonction réception Serial ────────────────────
 void recevoirEtAnalyserSerial() {
+
     samples_recorded = 0;
     segs_recorded    = 0;
     history_len      = 0;
@@ -582,6 +585,8 @@ void recevoirEtAnalyserSerial() {
 
     currentState = RESULTATS;
     afficherResultats();
+
+
 }
 
 
@@ -738,7 +743,28 @@ void setup() {
     mic_cfg.left_channel  = true;
     M5.Mic.config(mic_cfg);
     M5.Mic.begin();
-    M5.Display.println("Micro OK");
+    // Test microphone au démarrage
+    M5.Display.println("Test micro...");
+    int16_t test_buf[1600];  // 100ms
+    bool ok = M5.Mic.record(test_buf, 1600, SAMPLE_RATE);
+
+    int16_t test_max = 0;
+    for (int i = 0; i < 1600; i++)
+        if (abs(test_buf[i]) > test_max)
+            test_max = abs(test_buf[i]);
+
+    Serial.printf("Test micro: ok=%d max=%d\n", ok, test_max);
+    logMsg("Test micro: ok=%d max=%d\n", ok, test_max);
+
+    if (test_max < 100) {
+        M5.Display.setTextColor(RED);
+        M5.Display.println("MICRO FAIBLE!");
+    } else {
+        M5.Display.setTextColor(GREEN);
+        M5.Display.printf("MICRO OK max=%d\n", test_max);
+    }
+    delay(1000);
+   // M5.Display.println("Micro OK");
 
     // ── Connexion WiFi ────────────────────────────────────────────
     M5.Display.setTextColor(WHITE);
@@ -849,12 +875,25 @@ void loop() {
                         (float)audio_buffer[i] / global_max * 32767.0f);
             }
 
+             // Après normalisation globale
+            logMsg("Signal brut: max=%d segs=%d\n", global_max, segs_recorded);
+
+            // Afficher RMS des 5 premiers segments
+            for (int s = 0; s < min(5, segs_recorded); s++) {
+                int16_t* src = audio_buffer + s * SEG_SAMPLES;
+                int64_t sum_sq = 0;
+                for (int i = 0; i < SEG_SAMPLES; i++)
+                    sum_sq += (int64_t)src[i] * src[i];
+                float rms = sqrtf((float)sum_sq / SEG_SAMPLES);
+                logMsg("Seg %d RMS = %.1f\n", s, rms);
+            }
+
             duree_miction = 0; n_episodes = 0;
             chasse = false; segs_analyses = 0; history_len = 0;
 
             static float mel_spec[N_MELS * N_FRAMES];
 
-            for (int s = 0; s < segs_recorded; s++) {
+          /* for (int s = 0; s < segs_recorded; s++) {
                 int16_t* src = audio_buffer + s * SEG_SAMPLES;
                 computeMelSpec(src, mel_spec);
 
@@ -893,8 +932,27 @@ void loop() {
                     afficherAnalyse(s+1, segs_recorded);
                     M5.update();
                 }
+            }*/
+            // Debug complet — afficher TOUS les segments
+            for (int s = 0; s < segs_recorded; s++) {
+                int16_t* src = audio_buffer + s * SEG_SAMPLES;
+                
+                // RMS du segment brut
+                int64_t sum_sq = 0;
+                for (int i = 0; i < SEG_SAMPLES; i++)
+                    sum_sq += (int64_t)src[i] * src[i];
+                float rms = sqrtf((float)sum_sq / SEG_SAMPLES);
+                
+                computeMelSpec(src, mel_spec);
+                bool debug_seg = true;  // ← debug sur TOUS les segments
+                int label_idx = predireSegment(mel_spec, debug_seg);
+                
+                logMsg("Seg %2d RMS=%.0f → %s\n", s, rms, LABELS[label_idx]);
+                
+                if (history_len < MAX_HISTORY)
+                    label_history[history_len++] = label_idx;
+                segs_analyses++;
             }
-
             calculerIndicateurs();
             envoyerBilan();
             currentState = RESULTATS;
